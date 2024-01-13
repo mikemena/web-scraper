@@ -8,4 +8,9 @@ result = requests.get(basic_url.format(page_number))
 
 soup = bs4.BeautifulSoup(result.text, "html.parser")
 
-print(soup.select(".product_pod"))
+books = soup.select(".product_pod")
+
+example = books[0].select("a")[1]["title"]
+
+print(example)
+# print(books)
