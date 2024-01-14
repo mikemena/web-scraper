@@ -3,14 +3,25 @@ import requests
 
 basic_url = "https://books.toscrape.com/catalogue/category/books_1/page-{}.html"
 
-page_number = 1
-result = requests.get(basic_url.format(page_number))
+# List of 4 or 5 star titles
+high_rated_titles = []
 
-soup = bs4.BeautifulSoup(result.text, "html.parser")
+# Iterate pages
+for page in range(1, 51):
+    url_page = basic_url.format(page)
+    result = requests.get(url_page)
+    soup = bs4.BeautifulSoup(result.text, "html.parser")
 
-books = soup.select(".product_pod")
+    # Select book data
+    books = soup.select(".product_pod")
 
-example = books[0].select("a")[1]["title"]
+    # Iterate books
+    for book in books:
+        # Check if the book is 4 or 5 star rating
+        if len(book.select(".star-rating.Four")) != 0 or len(
+            book.select(".star-rating.Five")
+        ):
+            # Store book title
+            book_title = book.select("a")[1]["title"]
 
-print(example)
-# print(books)
+            # Add book to list
