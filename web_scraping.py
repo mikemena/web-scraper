@@ -7,7 +7,7 @@ basic_url = "https://books.toscrape.com/catalogue/category/books_1/page-{}.html"
 high_rated_titles = []
 
 # Iterate pages
-for page in range(1, 51):
+for page in range(1, 2):
     url_page = basic_url.format(page)
     result = requests.get(url_page)
     soup = bs4.BeautifulSoup(result.text, "html.parser")
@@ -25,3 +25,8 @@ for page in range(1, 51):
             book_title = book.select("a")[1]["title"]
 
             # Add book to list
+            high_rated_titles.append(book_title)
+
+# Show 4 or 5 star rated books in the console
+for b in high_rated_titles:
+    print(b)
