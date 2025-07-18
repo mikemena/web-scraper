@@ -5,3 +5,5 @@ lxml
 json
 openpyxl
 schedule
+selenium
+webdriver-manager

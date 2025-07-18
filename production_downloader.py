@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-Direct URL approach - skip navigation, go straight to search form
-https://quality.healthfinder.fl.gov/Facility-Search/FacilityLocateSearch
-"""
-
 import time
 import logging
 import os
@@ -26,7 +20,6 @@ logging.basicConfig(
         logging.StreamHandler(),
     ],
 )
-
 
 class DirectURLDownloader:
     def __init__(self, download_dir="./downloads"):
@@ -525,7 +518,7 @@ class DirectURLDownloader:
             logging.info(
                 "🔍 Keeping browser open for 30 seconds for manual inspection..."
             )
-            time.sleep(30)
+            time.sleep(5)
 
             return True
 
@@ -538,20 +531,8 @@ class DirectURLDownloader:
                 logging.info("🔚 Closing browser...")
                 self.driver.quit()
 
-
 def main():
-    """Main execution"""
-
-    logging.info("=" * 70)
-    logging.info("🎯 DIRECT URL APPROACH - SKIP NAVIGATION!")
-    logging.info("Target: 539 Ambulatory Surgery Centers (Active/Open)")
-    logging.info(
-        "URL: https://quality.healthfinder.fl.gov/Facility-Search/FacilityLocateSearch"
-    )
-    logging.info("=" * 70)
-
     downloader = DirectURLDownloader()
-
     try:
         success = downloader.main_process()
 
@@ -564,7 +545,6 @@ def main():
         logging.error(f"❌ Main execution error: {str(e)}")
 
     logging.info("=" * 70)
-
 
 if __name__ == "__main__":
     main()
