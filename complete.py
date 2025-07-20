@@ -2,7 +2,6 @@ import requests
 import json
 import re
 from bs4 import BeautifulSoup
-from urllib.parse import quote
 
 
 def get_facility_ids(facility_code):
@@ -58,54 +57,6 @@ def get_facility_ids(facility_code):
         return {"license_ids": [], "link_ids": []}
 
 
-def get_facility_ids_selenium(facility_code):
-    """
-    Alternative method using Selenium (more reliable but slower)
-    Uncomment and use if the regex method doesn't work
-    """
-    from selenium import webdriver
-    from selenium.webdriver.chrome.options import Options
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-
-    url = (
-        f"https://quality.healthfinder.fl.gov/Facility-Provider/{facility_code}?&type=1"
-    )
-
-    # Setup Chrome options
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")  # Run in background
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-
-    try:
-        driver = webdriver.Chrome(options=chrome_options)
-        driver.get(url)
-
-        # Wait for the page to load and execute JavaScript
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
-        )
-
-        # Execute JavaScript to get the data variable
-        data = driver.execute_script(
-            "return typeof data !== 'undefined' ? data : null;"
-        )
-
-        driver.quit()
-
-        if data:
-            return extract_ids_filtered(data)
-        else:
-            print(f"Data variable not found for {facility_code}")
-            return {"license_ids": [], "link_ids": []}
-
-    except Exception as e:
-        print(f"Selenium error for {facility_code}: {e}")
-        return {"license_ids": [], "link_ids": []}
-
-
 def extract_ids_filtered(data):
     """
     Extract LicenseID and LinkId from facility data using list comprehension
@@ -133,29 +84,6 @@ def extract_ids_filtered(data):
     ]
 
     return {"license_ids": license_ids, "link_ids": link_ids}
-
-
-def scrape_multiple_facilities(facility_codes):
-    """
-    Scrape multiple facility types and combine results
-
-    Args:
-        facility_codes (list): List of facility codes to scrape
-
-    Returns:
-        dict: Combined results for all facility types
-    """
-    all_results = {}
-
-    for code in facility_codes:
-        print(f"Scraping {code}...")
-        result = get_facility_ids(code)
-        all_results[code] = result
-        print(
-            f"Found {len(result['license_ids'])} License IDs and {len(result['link_ids'])} Link IDs"
-        )
-
-    return all_results
 
 
 def export_facility_data(facility_code, license_ids, link_ids, session=None):
@@ -220,7 +148,7 @@ def export_facility_data(facility_code, license_ids, link_ids, session=None):
         headers = {
             "Content-Type": "application/x-www-form-urlencoded",
             "Referer": url,
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            # "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
         }
 
         # Make the POST request
@@ -294,9 +222,6 @@ def get_facility_ids_with_session(facility_code, session):
         response = session.get(url)
         response.raise_for_status()
 
-        # Parse the HTML
-        soup = BeautifulSoup(response.content, "html.parser")
-
         # Extract using regex
         script_content = response.text
         data_match = re.search(
@@ -363,10 +288,3 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"✗ Failed {code}: {e}")
         print("-" * 50)
-
-# Requirements for this script:
-# pip install requests beautifulsoup4
-#
-# For Selenium method (optional):
-# pip install selenium
-# You'll also need ChromeDriver installed
