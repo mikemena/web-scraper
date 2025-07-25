@@ -2,6 +2,9 @@ import requests
 import json
 import re
 from bs4 import BeautifulSoup
+import ssl
+
+print(ssl.OPENSSL_VERSION)
 
 
 def get_facility_ids(facility_code):
@@ -87,18 +90,6 @@ def extract_ids_filtered(data):
 
 
 def export_facility_data(facility_code, license_ids, link_ids, session=None):
-    """
-    Export facility data using the extracted IDs
-
-    Args:
-        facility_code (str): The facility type code
-        license_ids (list): List of license IDs
-        link_ids (list): List of link IDs
-        session (requests.Session): Optional session to maintain cookies
-
-    Returns:
-        requests.Response: The response from the export endpoint
-    """
     if session is None:
         session = requests.Session()
 
@@ -163,16 +154,6 @@ def export_facility_data(facility_code, license_ids, link_ids, session=None):
 
 
 def get_and_export_facility_data(facility_code, export_filename=None):
-    """
-    Complete workflow: scrape facility data and export it
-
-    Args:
-        facility_code (str): The facility type code
-        export_filename (str): Optional filename to save the export
-
-    Returns:
-        tuple: (ids_data, export_response)
-    """
     # Create a session to maintain cookies
     session = requests.Session()
 
@@ -210,12 +191,10 @@ def get_and_export_facility_data(facility_code, export_filename=None):
 
 
 def get_facility_ids_with_session(facility_code, session):
-    """
-    Modified version of get_facility_ids that uses a session
-    """
     url = (
         f"https://quality.healthfinder.fl.gov/Facility-Provider/{facility_code}?&type=1"
     )
+    print(f"URL: {url}")
 
     try:
         # Make the request using the session
@@ -246,7 +225,7 @@ if __name__ == "__main__":
     # Method 1: Get IDs and export in one step
     print("=== Complete workflow: Scrape and Export ===")
     ids_data, export_response = get_and_export_facility_data(
-        "Abortion", "abortion_facilities.csv"
+        "Abortion", "abortion_facilities.xlsx"
     )
 
     if export_response:
@@ -254,37 +233,37 @@ if __name__ == "__main__":
         print(f"Export content length: {len(export_response.content)} bytes")
 
     # Method 2: Manual step-by-step process
-    print("\n=== Manual step-by-step process ===")
-    session = requests.Session()
+    # print("\n=== Manual step-by-step process ===")
+    # session = requests.Session()
 
     # Step 1: Get the facility IDs
-    facility_code = "Hospital"
-    ids_data = get_facility_ids_with_session(facility_code, session)
-    print(f"License IDs: {len(ids_data['license_ids'])}")
-    print(f"Link IDs: {len(ids_data['link_ids'])}")
+    # facility_code = "Hospital"
+    # ids_data = get_facility_ids_with_session(facility_code, session)
+    # print(f"License IDs: {len(ids_data['license_ids'])}")
+    # print(f"Link IDs: {len(ids_data['link_ids'])}")
 
     # Step 2: Export the data
-    if ids_data["license_ids"] or ids_data["link_ids"]:
-        export_response = export_facility_data(
-            facility_code, ids_data["license_ids"], ids_data["link_ids"], session
-        )
+    # if ids_data["license_ids"] or ids_data["link_ids"]:
+    #     export_response = export_facility_data(
+    #         facility_code, ids_data["license_ids"], ids_data["link_ids"], session
+    #     )
 
-        if export_response:
-            # Save the exported data
-            with open(f"{facility_code.lower()}_export.csv", "wb") as f:
-                f.write(export_response.content)
-            print(f"Exported {facility_code} data successfully")
+    #     if export_response:
+    #         # Save the exported data
+    #         with open(f"{facility_code.lower()}_export.csv", "wb") as f:
+    #             f.write(export_response.content)
+    #         print(f"Exported {facility_code} data successfully")
 
     # Method 3: Bulk export multiple facility types
-    print("\n=== Bulk export multiple facility types ===")
-    facility_codes = ["Abortion", "Hospital", "ALF", "Nursing-Home"]
+    # print("\n=== Bulk export multiple facility types ===")
+    # facility_codes = ["Abortion", "Hospital", "ALF", "Nursing-Home"]
 
-    for code in facility_codes:
-        try:
-            ids_data, export_response = get_and_export_facility_data(
-                code, f"{code.lower()}.xlsx"
-            )
-            print(f"✓ Completed {code}")
-        except Exception as e:
-            print(f"✗ Failed {code}: {e}")
-        print("-" * 50)
+    # for code in facility_codes:
+    #     try:
+    #         ids_data, export_response = get_and_export_facility_data(
+    #             code, f"{code.lower()}.xlsx"
+    #         )
+    #         print(f"✓ Completed {code}")
+    #     except Exception as e:
+    #         print(f"✗ Failed {code}: {e}")
+    #     print("-" * 50)

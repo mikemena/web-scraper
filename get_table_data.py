@@ -57,54 +57,6 @@ def get_facility_ids(facility_code):
         return {"license_ids": [], "link_ids": []}
 
 
-def get_facility_ids_selenium(facility_code):
-    """
-    Alternative method using Selenium (more reliable but slower)
-    Uncomment and use if the regex method doesn't work
-    """
-    from selenium import webdriver
-    from selenium.webdriver.chrome.options import Options
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-
-    url = (
-        f"https://quality.healthfinder.fl.gov/Facility-Provider/{facility_code}?&type=1"
-    )
-
-    # Setup Chrome options
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")  # Run in background
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-
-    try:
-        driver = webdriver.Chrome(options=chrome_options)
-        driver.get(url)
-
-        # Wait for the page to load and execute JavaScript
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
-        )
-
-        # Execute JavaScript to get the data variable
-        data = driver.execute_script(
-            "return typeof data !== 'undefined' ? data : null;"
-        )
-
-        driver.quit()
-
-        if data:
-            return extract_ids_filtered(data)
-        else:
-            print(f"Data variable not found for {facility_code}")
-            return {"license_ids": [], "link_ids": []}
-
-    except Exception as e:
-        print(f"Selenium error for {facility_code}: {e}")
-        return {"license_ids": [], "link_ids": []}
-
-
 def extract_ids_filtered(data):
     """
     Extract LicenseID and LinkId from facility data using list comprehension
