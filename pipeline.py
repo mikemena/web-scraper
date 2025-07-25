@@ -15,60 +15,6 @@ logging.basicConfig(
 
 
 class DataPipeline:
-    def __init__(self, api_url, output_dir="ahca_data"):
-        self.facility_manager = FacilityLicenseManager(api_url, output_dir)
-        self.provider_manager = ProviderManager()
-        self.output_dir = output_dir
-        os.makedirs(self.output_dir, exist_ok=True)
-
-    def run_pipeline(self, facility_code, export_filename):
-        try:
-            # Process facility data
-            self.facility_manager._get_and_export_facility_data(
-                facility_code, export_filename
-            )
-            merged_df = self.facility_manager.get_merged_data()
-            if merged_df is not None:
-                output_path = os.path.join(self.output_dir, "all_facilities.xlsx")
-                merged_df.to_excel(output_path, index=False)
-                logging.info(f"Merged data saved to: {output_path}")
-                self.facility_manager.cleanup_excel_files()  # Clean up individual files
-            else:
-                logging.warning("No merged data available")
-
-            # Process provider data
-            provider_df = self.provider_manager.filter_excel_data()
-            if provider_df is not None and not provider_df.empty:
-                provider_output_path = os.path.join(
-                    self.output_dir, "filtered_providers.xlsx"
-                )
-                provider_df.to_excel(provider_output_path, index=False)
-                logging.info(f"Filtered provider data saved to: {provider_output_path}")
-            else:
-                logging.warning("No provider data filtered")
-
-        except Exception as e:
-            logging.error(f"Pipeline failed: {e}")
-            raise
-
-
-import os
-from facility_licenses import FacilityLicenseManager
-from providers import ProviderManager
-import logging
-
-# Set up logging
-logs_dir = "logs"
-os.makedirs(logs_dir, exist_ok=True)
-log_file = os.path.join(logs_dir, "pipeline.log")
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
-)
-
-
-class DataPipeline:
     def __init__(self, api_url, output_dir="ahca_data", provider_file_path=None):
         self.facility_manager = FacilityLicenseManager(api_url, output_dir)
         self.provider_manager = ProviderManager(provider_file_path)
@@ -116,7 +62,6 @@ class DataPipeline:
                 logging.warning(
                     f"Provider processing failed (continuing anyway): {provider_error}"
                 )
-
         except Exception as e:
             logging.error(f"Pipeline failed: {e}")
             raise
