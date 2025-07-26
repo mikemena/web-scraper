@@ -23,7 +23,7 @@ class DataPipeline:
 
     def run_pipeline(self, facility_code, export_filename):
         try:
-            # Process facility data
+            # Process facility data - only export, don't merge yet
             ids_data, export_response = (
                 self.facility_manager._get_and_export_facility_data(
                     facility_code, export_filename
@@ -32,20 +32,51 @@ class DataPipeline:
 
             if export_response and export_response.status_code == 200:
                 logging.info(f"Successfully exported {facility_code} data")
+                return True
+            else:
+                logging.error(f"Failed to export data for {facility_code}")
+                return False
 
-                # Merge data
+        except Exception as e:
+            logging.error(f"Pipeline failed for {facility_code}: {e}")
+            return False
+
+    def run_multiple_facilities(self, facility_codes):
+        """Run pipeline for multiple facility types and merge at the end"""
+        successful_exports = 0
+
+        # Process each facility type
+        for code in facility_codes:
+            try:
+                filename = f"{code.lower()}_facilities.xlsx"
+                logging.info(f"Processing facility type: {code}")
+                if self.run_pipeline(code, filename):
+                    successful_exports += 1
+            except Exception as e:
+                logging.error(f"Failed to process {code}: {e}")
+                continue
+
+        # Only proceed with merge and provider processing if we have successful exports
+        if successful_exports > 0:
+            # Merge all facility files
+            try:
+                logging.info("Starting merge of all facility files...")
                 merged_df = self.facility_manager.get_merged_data()
                 if merged_df is not None and not merged_df.empty:
                     output_path = os.path.join(self.output_dir, "all_facilities.xlsx")
                     merged_df.to_excel(output_path, index=False)
-                    logging.info(f"Merged data saved to: {output_path}")
-                    self.facility_manager.cleanup_excel_files()  # Clean up individual files
+                    logging.info(
+                        f"Merged data saved to: {output_path} ({len(merged_df)} total rows)"
+                    )
+
+                    # Clean up individual facility files
+                    self.facility_manager.cleanup_excel_files()
                 else:
                     logging.warning("No merged data available")
-            else:
-                logging.error(f"Failed to export data for {facility_code}")
+            except Exception as merge_error:
+                logging.error(f"Merge failed: {merge_error}")
 
-            # Process provider data (optional - won't fail if no provider data)
+            # Process provider data (once at the end)
             try:
                 provider_df = self.provider_manager.filter_excel_data()
                 if provider_df is not None and not provider_df.empty:
@@ -59,25 +90,11 @@ class DataPipeline:
                 else:
                     logging.info("No provider data available to filter")
             except Exception as provider_error:
-                logging.warning(
-                    f"Provider processing failed (continuing anyway): {provider_error}"
-                )
-        except Exception as e:
-            logging.error(f"Pipeline failed: {e}")
-            raise
-
-    def run_multiple_facilities(
-        self, facility_codes, base_filename="facilities_data.xlsx"
-    ):
-        """Run pipeline for multiple facility types"""
-        for code in facility_codes:
-            try:
-                filename = f"{code.lower()}_{base_filename}"
-                logging.info(f"Processing facility type: {code}")
-                self.run_pipeline(code, filename)
-            except Exception as e:
-                logging.error(f"Failed to process {code}: {e}")
-                continue
+                logging.warning(f"Provider processing failed: {provider_error}")
+        else:
+            logging.error(
+                "No successful facility exports, skipping merge and provider processing"
+            )
 
 
 if __name__ == "__main__":
@@ -93,20 +110,12 @@ if __name__ == "__main__":
 
         logging.info("=== Starting Complete Workflow: Scrape and Export ===")
 
-        # Iterate over each facility type in the JSON array
-        for mapping in facility_mappings:
-            facility_code = mapping["code"]
-            facility_description = mapping["description"]
-            export_filename = f"{facility_code.lower()}_facilities.xlsx"
+        # Extract facility codes for batch processing
+        facility_codes = [mapping["code"] for mapping in facility_mappings]
+        logging.info(f"Will process facility codes: {facility_codes}")
 
-            logging.info(f"Processing {facility_code} - {facility_description}")
-
-            try:
-                pipeline.run_pipeline(facility_code, export_filename)
-                logging.info(f"Successfully completed {facility_code}")
-            except Exception as facility_error:
-                logging.error(f"Failed to process {facility_code}: {facility_error}")
-                continue  # Continue with next facility type
+        # Process all facilities at once
+        pipeline.run_multiple_facilities(facility_codes)
 
         logging.info("=== Complete workflow finished ===")
 

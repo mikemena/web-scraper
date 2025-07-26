@@ -8,23 +8,6 @@
 
     deactivate
 
-
-## Installation
-
-1. Install Python 3.7 or higher
-2. Install required dependencies:
-   ```bash
-   pip install requests beautifulsoup4
-   ```
-
-## Usage
-
-### Basic Usage
-```bash
-python production_downloader.py
-```
-This will automatically export results to a excel file.
-
 ## Data Source
 
 This scraper extracts data from Florida's official Health Finder website:

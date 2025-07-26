@@ -262,92 +262,57 @@ class FacilityLicenseManager:
             return ids_data, None
 
     def _merge_excel_files(self):
-        """Merge only facility data files (not provider files)"""
-        if not self.facility_files:
-            logging.warning("No facility files to merge")
+        if not os.path.exists(self.output_dir):
+            logging.warning("Output directory doesn't exist")
             return None
 
+        # Find all Excel files that should be merged (facility files only)
+        excluded_files = {"filtered_providers.xlsx", "all_facilities.xlsx"}
         dfs = []
-        for file_path in self.facility_files:
-            try:
-                if os.path.exists(file_path):
-                    # Check if file is actually an Excel file by trying to read it
-                    try:
-                        # First, check if it's a valid Excel file by checking file content
-                        with open(file_path, "rb") as f:
-                            header = f.read(8)
-                            if not (
-                                header.startswith(b"PK")
-                                or header.startswith(b"\xd0\xcf")
-                            ):
-                                logging.error(
-                                    f"File {file_path} is not a valid Excel file (invalid header)"
-                                )
-                                continue
+        files_to_merge = []
 
-                        # Try reading with openpyxl engine first, then xlrd
-                        try:
-                            df = pd.read_excel(file_path, engine="openpyxl")
-                        except:
-                            try:
-                                df = pd.read_excel(file_path, engine="xlrd")
-                            except:
-                                # Last resort - try without specifying engine
-                                df = pd.read_excel(file_path)
+        for filename in os.listdir(self.output_dir):
+            if filename.endswith(".xlsx") and filename not in excluded_files:
+                file_path = os.path.join(self.output_dir, filename)
+                files_to_merge.append(file_path)
+                logging.info(f"DEBUG: Reading file: {filename}")
 
-                        if df.empty:
-                            logging.warning(f"Excel file {file_path} is empty")
-                            continue
+                try:
+                    df = pd.read_excel(file_path)
 
-                        # Add a column to track which facility type this data came from
-                        facility_type = (
-                            os.path.basename(file_path)
-                            .replace("_facilities.xlsx", "")
-                            .upper()
-                        )
-                        df["facility_type_source"] = facility_type
-                        dfs.append(df)
-                        logging.info(
-                            f"Added {len(df)} rows from {os.path.basename(file_path)}"
-                        )
+                    # Extract facility type from filename
+                    # Handle both patterns: "hospice_facilities.xlsx" and "hospice_facilities_data.xlsx"
+                    if "_facilities_data.xlsx" in filename:
+                        facility_type = filename.replace(
+                            "_facilities_data.xlsx", ""
+                        ).upper()
+                    elif "_facilities.xlsx" in filename:
+                        facility_type = filename.replace("_facilities.xlsx", "").upper()
+                    else:
+                        # Fallback - try to extract from filename
+                        facility_type = filename.replace(".xlsx", "").upper()
 
-                    except Exception as read_error:
-                        logging.error(
-                            f"Failed to read Excel file {file_path}: {read_error}"
-                        )
-                        # Check if the file might be HTML or text instead
-                        try:
-                            with open(file_path, "r", encoding="utf-8") as f:
-                                content = f.read(200)
-                                if content.strip().startswith("<"):
-                                    logging.error(
-                                        f"File {file_path} appears to be HTML, not Excel"
-                                    )
-                                elif "error" in content.lower():
-                                    logging.error(
-                                        f"File {file_path} contains error message: {content[:100]}"
-                                    )
-                                else:
-                                    logging.error(
-                                        f"File {file_path} content sample: {content[:100]}"
-                                    )
-                        except:
-                            pass
-                        continue
-
-                else:
-                    logging.warning(f"File not found: {file_path}")
-            except Exception as e:
-                logging.error(f"Failed to process {file_path}: {e}")
+                    df["facility_type_source"] = facility_type
+                    dfs.append(df)
+                    logging.info(
+                        f"DEBUG: Added {len(df)} rows from {filename} (type: {facility_type})"
+                    )
+                except Exception as e:
+                    logging.error(f"Failed to read {filename}: {e}")
+                    continue
 
         if dfs:
             self.merged_df = pd.concat(dfs, ignore_index=True)
             logging.info(
-                f"Merged {len(dfs)} facility files into a DataFrame with {len(self.merged_df)} rows"
+                f"Successfully merged {len(dfs)} files into {len(self.merged_df)} rows"
             )
+
+            # Store the list of files that were merged for cleanup
+            self.facility_files = files_to_merge
             return self.merged_df
-        logging.warning("No facility DataFrames to merge")
-        return None
+        else:
+            logging.warning("No DataFrames to merge")
+            return None
 
     def get_merged_data(self):
         """Public method to access the merged DataFrame for the pipeline."""
@@ -356,31 +321,66 @@ class FacilityLicenseManager:
         return self.merged_df
 
     def cleanup_excel_files(self):
-        """Clean up individual facility Excel files, excluding all_facilities.xlsx and filtered_providers.xlsx."""
+        """Clean up individual facility Excel files, keeping only all_facilities.xlsx and filtered_providers.xlsx."""
+        if not hasattr(self, "facility_files"):
+            # If facility_files not set, find all Excel files except the ones to keep
+            self.facility_files = []
+            excluded_files = {"filtered_providers.xlsx", "all_facilities.xlsx"}
+
+            for filename in os.listdir(self.output_dir):
+                if filename.endswith(".xlsx") and filename not in excluded_files:
+                    self.facility_files.append(os.path.join(self.output_dir, filename))
+
+        deleted_count = 0
         for file_path in self.facility_files:
             try:
-                filename = os.path.basename(file_path)
-                if filename not in ["all_facilities.xlsx", "filtered_providers.xlsx"]:
+                if os.path.exists(file_path):
+                    filename = os.path.basename(file_path)
                     os.remove(file_path)
                     logging.info(f"Deleted: {filename}")
+                    deleted_count += 1
             except Exception as e:
                 logging.error(f"Failed to delete {file_path}: {e}")
+
+        logging.info(
+            f"Cleanup complete: deleted {deleted_count} individual facility files"
+        )
+        self.facility_files = []
 
 
 if __name__ == "__main__":
     api_url = "https://quality.healthfinder.fl.gov/Facility-Provider"
     facility_manager = FacilityLicenseManager(api_url, output_dir="ahca_data")
+
     try:
-        facility_manager._get_and_export_facility_data(
-            "ASC", "ambulatory_surgery_centers.xlsx"
-        )
-        merged_df = facility_manager.get_merged_data()
-        if merged_df is not None:
-            output_path = os.path.join(
-                facility_manager.output_dir, "all_facilities.xlsx"
-            )
-            merged_df.to_excel(output_path, index=False)
-            logging.info(f"Merged data saved to: {output_path}")
-            facility_manager.cleanup_excel_files()  # Clean up individual files after saving
+        # Load facility mappings from JSON file
+        with open("facility_type_mapping.json", "r") as f:
+            facility_mappings = json.load(f)
+
+        logging.info("=== Starting Complete Workflow: Scrape and Export ===")
+
+        # Iterate over each facility type in the JSON array
+        for mapping in facility_mappings:
+            facility_code = mapping["code"]
+            facility_description = mapping["description"]
+            export_filename = f"{facility_code.lower()}_facilities.xlsx"
+
+            logging.info(f"Processing {facility_code} - {facility_description}")
+
+            try:
+                facility_manager._get_and_export_facility_data(
+                    facility_code, export_filename
+                )
+                logging.info(f"Successfully completed {facility_code}")
+            except Exception as facility_error:
+                logging.error(f"Failed to process {facility_code}: {facility_error}")
+                continue  # Continue with next facility type
+
+        logging.info("=== Complete workflow finished ===")
+
+    except FileNotFoundError:
+        logging.error("facility_type_mapping.json not found")
+    except json.JSONDecodeError:
+        logging.error("Invalid JSON in facility_type_mapping.json")
     except Exception as e:
-        logging.error(f"Main execution failed: {e}")
+        logging.error(f"Main pipeline execution failed: {e}")

@@ -6,7 +6,7 @@ import logging
 # Set up logging
 logs_dir = "logs"
 os.makedirs(logs_dir, exist_ok=True)
-log_file = os.path.join(logs_dir, "provider_manager.log")
+log_file = os.path.join(logs_dir, "pipeline.log")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",

@@ -1,17 +1,14 @@
 [
   {
-    "code": "ASC",
-    "description": "Ambulatory Surgery Centers",
-    "url": "https://quality.healthfinder.fl.gov/Facility-Provider/ASC?&type=1"
-  },
-  {
     "code": "Hospice",
     "description": "Hospice",
+    "pc_specialties": ["HOSPICE"],
     "url": "https://quality.healthfinder.fl.gov/Facility-Provider/Hospice?&type=1"
   },
   {
     "code": "Hospital",
     "description": "Hospital",
+    "pc_specialties": ["HOSPITAL", "CHILDREN'S HOSPITAL"],
     "url": "https://quality.healthfinder.fl.gov/Facility-Provider/Hospital?&type=1"
   }
 ]
