@@ -13,7 +13,9 @@ log_file = os.path.join(logs_dir, "pipeline.log")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
+    handlers=[logging.FileHandler(log_file, mode='w'),
+        logging.StreamHandler()],
+    force=True
 )
 
 
@@ -281,12 +283,7 @@ class FacilityLicenseManager:
                     df = pd.read_excel(file_path)
 
                     # Extract facility type from filename
-                    # Handle both patterns: "hospice_facilities.xlsx" and "hospice_facilities_data.xlsx"
-                    if "_facilities_data.xlsx" in filename:
-                        facility_type = filename.replace(
-                            "_facilities_data.xlsx", ""
-                        ).upper()
-                    elif "_facilities.xlsx" in filename:
+                    if "_facilities.xlsx" in filename:
                         facility_type = filename.replace("_facilities.xlsx", "").upper()
                     else:
                         # Fallback - try to extract from filename
@@ -321,7 +318,6 @@ class FacilityLicenseManager:
         return self.merged_df
 
     def cleanup_excel_files(self):
-        """Clean up individual facility Excel files, keeping only all_facilities.xlsx and filtered_providers.xlsx."""
         if not hasattr(self, "facility_files"):
             # If facility_files not set, find all Excel files except the ones to keep
             self.facility_files = []

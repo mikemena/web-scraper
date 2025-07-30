@@ -10,10 +10,8 @@ log_file = os.path.join(logs_dir, "pipeline.log")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(log_file),
-        logging.StreamHandler(),  # Optional: also log to console
-    ],
+    handlers=[logging.FileHandler(log_file, mode="w"), logging.StreamHandler()],
+    force=True,
 )
 
 
@@ -116,6 +114,7 @@ class ProviderManager:
                 "SPECIALTY_DE",
                 "LICENSE_NB",
                 "LICENSE_TYPE_DES",
+                "EXPIRATION_DATE",
             ]
 
             # Only keep columns that exist in the DataFrame
