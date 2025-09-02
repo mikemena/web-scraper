@@ -179,9 +179,56 @@ class DataMatcher:
         )
         return new_licenses_df
 
-    def _finalize_results(self, update_licenses_df, new_licenses_df):
+    def _find_expired_licenses(self, facilities_clean, providers_clean):
+        """Find expired licenses in providers that do not exist in facilities (no name + license match) and exp <= today."""
+        merged = pd.merge(
+            providers_clean,
+            facilities_clean,
+            on=["name_clean", "license_clean"],
+            how="left",
+            indicator=True,
+            suffixes=("_provider", "_facility"),
+        )
+
+        # Providers that have no match in facilities
+        no_match_df = merged[merged["_merge"] == "left_only"].copy()
+
+        # Drop facility columns (which are NaN) and _merge
+        facility_cols = [
+            col for col in no_match_df.columns if col.endswith("_facility")
+        ]
+        no_match_df = no_match_df.drop(columns=facility_cols + ["_merge"])
+
+        if no_match_df.empty:
+            logging.warning(
+                "No non-matching provider records found for expired licenses"
+            )
+            return pd.DataFrame()
+
+        # Get today's date (normalized to date only)
+        today = pd.to_datetime("today").normalize()
+
+        # Filter for expired: provider_exp_date <= today and not NaT
+        expired_mask = (no_match_df["provider_exp_date"] <= today) & no_match_df[
+            "provider_exp_date"
+        ].notna()
+        expired_licenses_df = no_match_df[expired_mask]
+
+        logging.info(
+            f"Expired licenses - records where provider exp <= today and no facility match: {len(expired_licenses_df)}"
+        )
+        return expired_licenses_df
+
+    def _finalize_results(
+        self, update_licenses_df, new_licenses_df, expired_licenses_df
+    ):
         """Clean up DataFrames and add metadata."""
-        columns_to_drop = ["name_clean", "license_clean"]
+        columns_to_drop = [
+            "name_clean",
+            "license_clean",
+            "facility_exp_date",
+            "provider_exp_date",
+        ]
 
         if not update_licenses_df.empty:
             update_licenses_df = update_licenses_df.drop(
@@ -203,7 +250,33 @@ class DataMatcher:
             new_licenses_df["match_timestamp"] = pd.Timestamp.now()
             new_licenses_df["match_criteria"] = "name_match_but_new_license"
 
-        return {"update_licenses": update_licenses_df, "new_licenses": new_licenses_df}
+        if not expired_licenses_df.empty:
+            expired_licenses_df = expired_licenses_df.drop(
+                columns=[
+                    col for col in columns_to_drop if col in expired_licenses_df.columns
+                ]
+            )
+            expired_licenses_df["match_timestamp"] = pd.Timestamp.now()
+            expired_licenses_df["match_criteria"] = "expired_license_not_in_facilities"
+
+        return {
+            "update_licenses": update_licenses_df,
+            "new_licenses": new_licenses_df,
+            "expired_licenses": expired_licenses_df,
+        }
+
+    def _format_expiration_dates(self, df):
+        """Format expiration date columns to 'MM/DD/YYYY' string format."""
+        expiration_cols = [
+            self.facility_columns["expiration"],
+            self.provider_columns["expiration"],
+        ]
+
+        for col in df.columns:
+            if col in expiration_cols and pd.api.types.is_datetime64_any_dtype(df[col]):
+                df[col] = df[col].dt.strftime("%m/%d/%Y")
+
+        return df
 
     def _save_results_to_excel(self, results, output_filename):
         """Save results to Excel file with separate worksheets."""
@@ -212,8 +285,10 @@ class DataMatcher:
         with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
             update_licenses_df = results["update_licenses"]
             new_licenses_df = results["new_licenses"]
+            expired_licenses_df = results["expired_licenses"]
 
             if not update_licenses_df.empty:
+                update_licenses_df = self._format_expiration_dates(update_licenses_df)
                 update_licenses_df.to_excel(
                     writer, sheet_name="update_licenses", index=False
                 )
@@ -227,11 +302,26 @@ class DataMatcher:
                 logging.info("Update licenses sheet created (empty)")
 
             if not new_licenses_df.empty:
+                new_licenses_df = self._format_expiration_dates(new_licenses_df)
                 new_licenses_df.to_excel(writer, sheet_name="new_licenses", index=False)
                 logging.info(f"New licenses saved: {len(new_licenses_df)} records")
             else:
                 pd.DataFrame().to_excel(writer, sheet_name="new_licenses", index=False)
                 logging.info("New licenses sheet created (empty)")
+
+            if not expired_licenses_df.empty:
+                expired_licenses_df = self._format_expiration_dates(expired_licenses_df)
+                expired_licenses_df.to_excel(
+                    writer, sheet_name="expired_licenses", index=False
+                )
+                logging.info(
+                    f"Expired licenses saved: {len(expired_licenses_df)} records"
+                )
+            else:
+                pd.DataFrame().to_excel(
+                    writer, sheet_name="expired_licenses", index=False
+                )
+                logging.info("Expired licenses sheet created (empty)")
 
         logging.info(f"Matched data saved to: {output_path}")
 
@@ -248,6 +338,7 @@ class DataMatcher:
                 return {
                     "update_licenses": pd.DataFrame(),
                     "new_licenses": pd.DataFrame(),
+                    "expired_licenses": pd.DataFrame(),
                 }
 
             # Prepare data for matching
@@ -263,15 +354,22 @@ class DataMatcher:
             # Find new licenses
             new_licenses_df = self._find_new_licenses(facilities_clean, providers_clean)
 
+            # Find expired licenses
+            expired_licenses_df = self._find_expired_licenses(
+                facilities_clean, providers_clean
+            )
+
             # Finalize results
-            results = self._finalize_results(update_licenses_df, new_licenses_df)
+            results = self._finalize_results(
+                update_licenses_df, new_licenses_df, expired_licenses_df
+            )
 
             # Save output if requested
             if save_output:
                 self._save_results_to_excel(results, output_filename)
 
             logging.info(
-                f"Successfully processed - Update licenses: {len(results['update_licenses'])}, New licenses: {len(results['new_licenses'])}"
+                f"Successfully processed - Update licenses: {len(results['update_licenses'])}, New licenses: {len(results['new_licenses'])}, Expired licenses: {len(results['expired_licenses'])}"
             )
             return results
 
@@ -280,7 +378,11 @@ class DataMatcher:
             import traceback
 
             logging.error(f"Traceback: {traceback.format_exc()}")
-            return {"update_licenses": pd.DataFrame(), "new_licenses": pd.DataFrame()}
+            return {
+                "update_licenses": pd.DataFrame(),
+                "new_licenses": pd.DataFrame(),
+                "expired_licenses": pd.DataFrame(),
+            }
 
     def get_matching_summary(self, all_facilities_df, filtered_providers_df):
         try:
