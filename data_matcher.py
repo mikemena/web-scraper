@@ -160,23 +160,53 @@ class DataMatcher:
 
     def _find_new_licenses(self, facilities_clean, providers_clean):
         provider_licenses = set(providers_clean["license_clean"].unique())
+        # Primary: facilities where name matches provider name
         facility_names_in_providers = set(providers_clean["name_clean"].unique())
-        new_licenses_mask = facilities_clean["name_clean"].isin(
+        primary_new_licenses_mask = facilities_clean["name_clean"].isin(
             facility_names_in_providers
         ) & ~facilities_clean["license_clean"].isin(provider_licenses)
-        new_licenses_df = facilities_clean[new_licenses_mask].copy()
+        primary_new_licenses_df = facilities_clean[primary_new_licenses_mask].copy()
+
+        # Secondary: facilities where name matches provider business_entity_name
+        facility_names_in_business = set(
+            providers_clean["business_entity_name_clean"].unique()
+        )
+        secondary_new_licenses_mask = facilities_clean["name_clean"].isin(
+            facility_names_in_business
+        ) & ~facilities_clean["license_clean"].isin(provider_licenses)
+        secondary_new_licenses_df = facilities_clean[secondary_new_licenses_mask].copy()
+
+        # Combine primary and secondary, remove duplicates
+        new_licenses_df = pd.concat(
+            [primary_new_licenses_df, secondary_new_licenses_df]
+        ).drop_duplicates()
+
         logging.info(
-            f"New licenses - records where name exists but license is new: {len(new_licenses_df)}"
+            f"New licenses - primary matches (name): {len(primary_new_licenses_df)}, "
+            f"secondary matches (business entity): {len(secondary_new_licenses_df) - len(primary_new_licenses_df)}, "
+            f"total unique records: {len(new_licenses_df)}"
         )
         return new_licenses_df
 
     def _find_expired_licenses(self, facilities_clean, providers_clean):
         all_matches = self._find_update_licenses(facilities_clean, providers_clean)
-        matched_keys = all_matches["license_clean"] + all_matches["name_clean_provider"]
+        # Include both name_clean and business_entity_name_clean in matched keys
+        matched_keys = set(
+            all_matches["license_clean"] + all_matches["name_clean_provider"]
+        ).union(
+            set(
+                all_matches["license_clean"]
+                + all_matches["business_entity_name_clean_provider"]
+            )
+        )
         no_match_df = providers_clean[
             ~(providers_clean["license_clean"] + providers_clean["name_clean"]).isin(
                 matched_keys
             )
+            & ~(
+                providers_clean["license_clean"]
+                + providers_clean["business_entity_name_clean"]
+            ).isin(matched_keys)
         ]
         today = pd.to_datetime("today").normalize()
         expired_mask = (no_match_df["provider_exp_date"] < today) & no_match_df[
@@ -204,6 +234,7 @@ class DataMatcher:
             "licensed_beds",
             "FACILITY_BED_ID",
             "FACILITY_BED_START_DATE",
+            "effectiveDate",
         ]
 
         # Check if required columns exist
@@ -211,7 +242,6 @@ class DataMatcher:
             "PROVIDER_ID",
             "FB_NUMBER",
             "PROVIDER_CATEGORY_CD",
-            "licensed_beds",
         ]
         missing_cols = [
             col
@@ -236,10 +266,9 @@ class DataMatcher:
                 != update_licenses_df["licensed_beds"]
             )
         )
-
         update_hospital_beds = update_licenses_df[update_mask].copy()
 
-        # Apply new rule: exclude rows where licensed_beds == 0 and FACILITY_BED_COUNT is 0 or NaN
+        # Apply rule: exclude rows where licensed_beds == 0 and FACILITY_BED_COUNT is 0 or NaN
         if not update_hospital_beds.empty:
             exclude_mask = (update_hospital_beds["licensed_beds"] == 0) & (
                 update_hospital_beds["facility_bed_count"].isna()
@@ -250,7 +279,8 @@ class DataMatcher:
             logging.info(
                 f"Excluded {excluded_rows} rows from update_hospital_beds where licensed_beds = 0 and FACILITY_BED_COUNT is 0 or blank"
             )
-            # Format FACILITY_BED_START_DATE to mm/dd/yyyy if present
+
+        # Format FACILITY_BED_START_DATE to mm/dd/yyyy if present
         if (
             not update_hospital_beds.empty
             and "FACILITY_BED_START_DATE" in update_hospital_beds.columns
@@ -258,15 +288,18 @@ class DataMatcher:
             update_hospital_beds["FACILITY_BED_START_DATE"] = pd.to_datetime(
                 update_hospital_beds["FACILITY_BED_START_DATE"], errors="coerce"
             ).dt.strftime("%m/%d/%Y")
+            logging.info(
+                "Formatted FACILITY_BED_START_DATE to mm/dd/yyyy in update_hospital_beds"
+            )
 
-        update_hospital_beds["licensed_beds"] = update_hospital_beds[
-            "licensed_beds"
-        ]  # Use facility's licensed_beds
-        # update_hospital_beds["effectiveDate"] = datetime.now().strftime("%m/%d/%Y")
+        update_hospital_beds["licensed_beds"] = update_hospital_beds["licensed_beds"]
+        update_hospital_beds["effectiveDate"] = datetime.now().strftime("%m/%d/%Y")
 
-        # Filter to desired columns, include FACILITY_BED_ID if present
+        # Filter to desired columns
         available_update_cols = [
-            col for col in update_beds_columns if col in update_hospital_beds.columns
+            col
+            for col in update_beds_columns
+            if col in update_hospital_beds.columns or col == "effectiveDate"
         ]
         update_hospital_beds = update_hospital_beds[available_update_cols]
 
