@@ -203,11 +203,16 @@ class DataMatcher:
             "PROVIDER_CATEGORY_CD",
             "licensed_beds",
             "FACILITY_BED_ID",
-            "effectiveDate",
+            "FACILITY_BED_START_DATE",
         ]
 
         # Check if required columns exist
-        required_provider_cols = ["PROVIDER_ID", "FB_NUMBER", "PROVIDER_CATEGORY_CD"]
+        required_provider_cols = [
+            "PROVIDER_ID",
+            "FB_NUMBER",
+            "PROVIDER_CATEGORY_CD",
+            "licensed_beds",
+        ]
         missing_cols = [
             col
             for col in required_provider_cols
@@ -222,22 +227,46 @@ class DataMatcher:
                 "add_hospital_beds": pd.DataFrame(columns=add_beds_columns),
             }
 
-        # Update beds: where counts differ
+        # Update beds: where counts differ and facility_bed_count is not NaN or 0
         update_mask = (
-            update_licenses_df["facility_bed_count"]
-            != update_licenses_df["licensed_beds"]
+            (~update_licenses_df["facility_bed_count"].isna())
+            & (update_licenses_df["facility_bed_count"] != 0)
+            & (
+                update_licenses_df["facility_bed_count"]
+                != update_licenses_df["licensed_beds"]
+            )
         )
+
         update_hospital_beds = update_licenses_df[update_mask].copy()
+
+        # Apply new rule: exclude rows where licensed_beds == 0 and FACILITY_BED_COUNT is 0 or NaN
+        if not update_hospital_beds.empty:
+            exclude_mask = (update_hospital_beds["licensed_beds"] == 0) & (
+                update_hospital_beds["facility_bed_count"].isna()
+                | (update_hospital_beds["facility_bed_count"] == 0)
+            )
+            excluded_rows = len(update_hospital_beds[exclude_mask])
+            update_hospital_beds = update_hospital_beds[~exclude_mask]
+            logging.info(
+                f"Excluded {excluded_rows} rows from update_hospital_beds where licensed_beds = 0 and FACILITY_BED_COUNT is 0 or blank"
+            )
+            # Format FACILITY_BED_START_DATE to mm/dd/yyyy if present
+        if (
+            not update_hospital_beds.empty
+            and "FACILITY_BED_START_DATE" in update_hospital_beds.columns
+        ):
+            update_hospital_beds["FACILITY_BED_START_DATE"] = pd.to_datetime(
+                update_hospital_beds["FACILITY_BED_START_DATE"], errors="coerce"
+            ).dt.strftime("%m/%d/%Y")
+
         update_hospital_beds["licensed_beds"] = update_hospital_beds[
             "licensed_beds"
         ]  # Use facility's licensed_beds
-        update_hospital_beds["effectiveDate"] = datetime.now().strftime("%m/%d/%Y")
+        # update_hospital_beds["effectiveDate"] = datetime.now().strftime("%m/%d/%Y")
 
         # Filter to desired columns, include FACILITY_BED_ID if present
         available_update_cols = [
-            col
-            for col in update_beds_columns
-            if col in update_hospital_beds.columns or col == "effectiveDate"
+            col for col in update_beds_columns if col in update_hospital_beds.columns
         ]
         update_hospital_beds = update_hospital_beds[available_update_cols]
 
